@@ -24,6 +24,7 @@ setup(
             'second_step = ros2_project_sc22lv.second_step:main',
             'third_step = ros2_project_sc22lv.third_step:main',
             'fourth_step = ros2_project_sc22lv.fourth_step:main',
+            'target_point = ros2_project_sc22lv.ros2025_targetpoint:main',
         ],
     },
 )

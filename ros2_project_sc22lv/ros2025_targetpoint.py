@@ -148,201 +148,274 @@ class TargetPoint(Node):
             self.send_goal()    
         self.scan_timer.cancel()
 
-    def s2top(self):
+    def stop(self):
         print("stop")
         twist = Twist()
         twist.linear.x = 0.0
         twist.angular.z = 0.0
         self.publisher.publish(twist)
-        self.cancel_goal()
-    
-    # def go_to_blue(self, contour):
-    #     (x, y), radius = cv2.minEnclosingCircle(contour)
-    #     center_x = int(x)
-    #     image_center = self.image_width // 2  # Assume self.image_width is set in callback
-        
-    #     # If box is off-center, rotate to center it
-    #     if abs(center_x - image_center) > 20:  # 20-pixel tolerance
-    #         self.get_logger().info("centering")
-    #         twist = Twist()
-    #         twist.linear.x = 0.0
-    #         twist.angular.z = 0.05 if (center_x < image_center) else -0.05  # Turn direction
-    #         # self.stop()
-    #         self.publisher.publish(twist)
-        
-    #     # If box is too far (small in view), move forward
-    #     if radius < 250.0:  # Adjust threshold as needed
-
-    #         self.get_logger().info("too far, going forward")
-    #         twist = Twist()
-    #         twist.linear.x = 0.1  # Forward speed
-    #         self.publisher.publish(twist)
-    #         # self.walk_forward()
-        
-    #     # If box is large enough (close), stop
-    #     else:
-    #         self.stop()
-    #         self.get_logger().info("Reached ~1m from blue box!")
-    
-    def go_to_2blue(self, box_center, box_radius):
-        print("gtb")
-        self.stop()
-        self.cancel_goal()
-        print("gtb stop")
-        self.action = "approach"
-        twist = Twist()
-        
-        # Center the box in view
-        if abs(box_center[0] - self.image_width//2) > 30:
-            print("rotate")
-            twist.angular.z = -0.2 if (box_center[0] < self.image_width//2) else 0.2
-            # self.scan_timer = self.create_timer(15.0, self.scan_timeout)
-            # print("stop after 5s")
-            self.publisher.publish(twist)
-            return
-        
-        if abs(box_center[0] - self.image_width//2) <= 30:
-            print("towards")
-
-            # Move forward if centered
-            twist.linear.x = 0.15
-            
-            # Estimate distance (calibrate these values!)
-            distance_estimate = (1.0 / (box_radius/self.image_width)) * 0.4
-            
-            if distance_estimate <= self.buffer:
-                self.stop()
-                self.action = "stationary"
-                self.get_logger().info("Successfully reached blue box!")
-                return
-        
-        # self.publisher.publish(twist)
-        distance_estimate = (1.0 / (box_radius/self.image_width)) * 0.5
-
-        if distance_estimate > self.buffer:  # If >1m away
-            print(f"Moving forward (distance: {distance_estimate:.2f}m)")
-            twist.linear.x = 0.15
-            self.publisher.publish(twist)
-        else:
-            print("Reached target distance! Stopping")
-            self.stop()
-            self.action = "stationary"
-            
+        # self.cancel_goal()
 
     
+    # def go_to_blue(self, data):
+    #     print("gtb")
+    #     self.stop()
+    #     self.cancel_goal()
+    #     print("gtb stop")
+    #     self.action = "approach"
+    #     twist = Twist()
+        
+    #     while not self.action == "stationary" and rclpy.ok():
+    #         image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
+    #         self.image_width = image.shape[1]
+    #         hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            
+    #         # Better blue range (as per lab notes)
+    #         blue_lower1 = np.array([100, 100, 100])  # Wider range for blue
+    #         blue_upper1 = np.array([140, 255, 255])
+            
+    #         # Create mask
+    #         blue_mask = cv2.inRange(hsv_image, blue_lower1, blue_upper1)
+            
+    #         # Show threshold image for debugging
+    #         # cv2.imshow('Blue Mask', blue_mask)
+    #         # cv2.namedWindow('Blue Mask', cv2.WINDOW_NORMAL)
+    #         # cv2.imshow('Blue Mask', image)
+    #         # cv2.resizeWindow('Blue Mask', 320, 240)
+    #         # cv2.waitKey(3)
+                
+    #         # Find contours
+    #         contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+    #         if contours:
+    #             # Get largest contour
+    #             c = max(contours, key=cv2.contourArea)
+    #             area = cv2.contourArea(c)
+                
+    #             # Dynamic area threshold (1% of image area)
+    #             min_area = 0.01 * (image.shape[0] * image.shape[1])
+                
+    #             if area > min_area:
+    #                 if hasattr(self, 'scan_timer'):
+    #                     self.scan_timer.cancel()
+                    
+    #                 # Get circle properties
+    #                 (x, y), radius = cv2.minEnclosingCircle(c)
+    #                 center = (int(x), int(y))
+    #                 radius = int(radius)
+
+    #         # Center the box in view
+    #         print("abs ", abs(center[0] - self.image_width//2))
+    #         if abs(center[0] - self.image_width//2) > 30:
+    #             print("1")
+    #             twist.angular.z = -0.2 if (center[0] < self.image_width//2) else 0.2
+    #             print("2")
+    #             # spin_duration = math.radians(0.2) / 0.2  # H 31.4 seconds
+    #             spin_duration = 2.0
+    #             print("3")
+    #             start_time = self.get_clock().now()
+    #             print("4")
+    #             while (self.get_clock().now() - start_time).nanoseconds < spin_duration * 1e9:
+    #                 print("6")
+    #                 self.publisher.publish(twist)
+    #                 print("7")
+    #                 rclpy.spin_once(self, timeout_sec=0.1)
+    #                 print("8")
+    #             print("9")
+    #             self.stop()
+    #             print("10")
+    #             # print("rotate")
+    #             # self.publisher.publish(twist)
+
+    #         # distance_estimate = (1.0 / (box_radius/self.image_width)) * 0.4
+    #         # print("dis est", distance_estimate)
+    #         # if distance_estimate > self.buffer:
+    #         print("con area", cv2.contourArea(c))
+    #         if cv2.contourArea(c) <= 30000:
+    #             print("towards")
+
+    #             # Move forward if centered
+    #             twist.linear.x = 0.15
+    #             twist.angular.z = 0.0
+    #             spin_duration = 2.0
+    #             start_time = self.get_clock().now()
+    #             while (self.get_clock().now() - start_time).nanoseconds < spin_duration * 1e9:
+    #                 self.publisher.publish(twist)
+    #                 rclpy.spin_once(self, timeout_sec=0.1)
+    #             self.stop()
+                
+    #         #     # Estimate distance (calibrate these values!)
+    #         #     distance_estimate = (1.0 / (box_radius/self.image_width)) * 0.4
+                
+    #         #     if distance_estimate <= self.buffer:
+    #         #         self.stop()
+    #         #         self.action = "stationary"
+    #         #         self.get_logger().info("Successfully reached blue box!")
+    #         #         return
+            
+    #         # # self.publisher.publish(twist)
+    #         # distance_estimate = (1.0 / (box_radius/self.image_width)) * 0.5
+
+    #         # if distance_estimate > self.buffer:  # If >1m away
+    #         #     print(f"Moving forward (distance: {distance_estimate:.2f}m)")
+    #         #     twist.linear.x = 0.15
+    #         #     self.publisher.publish(twist)
+    #         if (cv2.contourArea(c) > 30000) and (abs(box_center[0] - self.image_width//2) < 30) :
+    #             print("Reached target distance! Stopping")
+    #             self.stop()
+    #             self.action = "stationary"
+            
     # def callback(self, data):
     #     try:
+    #         # Convert and display original image
     #         image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
-    #         cv2.namedWindow('Detection', cv2.WINDOW_NORMAL)
-    #         cv2.imshow('Detection', image)
-    #         cv2.resizeWindow('Detection', 320, 240)
-    #         cv2.waitKey(3)
-            
     #         self.image_width = image.shape[1]
-    #         if self.action in ["scan", "approach"]:
-    #             hsv_blue_lower = np.array([120 - self.sensitivity, 100, 100])
-    #             hsv_blue_upper = np.array([120 + self.sensitivity, 255, 255])
-    #             Hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    #             blue_image = cv2.inRange(Hsv_image, hsv_blue_lower, hsv_blue_upper)
+            
+    #         # # Show original image
+    #         # cv2.namedWindow('Original', cv2.WINDOW_NORMAL)
+    #         # cv2.imshow('Original', image)
+    #         # cv2.resizeWindow('Original', 320, 240)
+    #         # cv2.waitKey(3)
+            
+    #         # print("action, ", self.action)
+            
+    #         if self.action in ["nav", "scan", "approach"]:
+    #             # Convert to HSV
+    #             hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
                 
-    #             contours, hierarchy = cv2.findContours(blue_image,mode = cv2.RETR_TREE, method = cv2.CHAIN_APPROX_SIMPLE)
+    #             # Better blue range (as per lab notes)
+    #             blue_lower1 = np.array([100, 100, 100])  # Wider range for blue
+    #             blue_upper1 = np.array([140, 255, 255])
                 
-    #             if contours: 
+    #             # Create mask
+    #             blue_mask = cv2.inRange(hsv_image, blue_lower1, blue_upper1)
+                
+    #             # Show threshold image for debugging
+    #             # cv2.imshow('Blue Mask', blue_mask)
+    #             # cv2.namedWindow('Blue Mask', cv2.WINDOW_NORMAL)
+    #             # cv2.imshow('Blue Mask', image)
+    #             # cv2.resizeWindow('Blue Mask', 320, 240)
+    #             # cv2.waitKey(3)
+                    
+    #             # Find contours
+    #             contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                
+    #             if contours:
+    #                 # Get largest contour
     #                 c = max(contours, key=cv2.contourArea)
-    #                 if cv2.contourArea(c) > 100:  # Threshold for ~1m distance+
+    #                 area = cv2.contourArea(c)
+                    
+    #                 # Dynamic area threshold (1% of image area)
+    #                 min_area = 0.01 * (image.shape[0] * image.shape[1])
+                    
+    #                 if area > min_area:
     #                     if hasattr(self, 'scan_timer'):
     #                         self.scan_timer.cancel()
                         
+    #                     # Get circle properties
     #                     (x, y), radius = cv2.minEnclosingCircle(c)
     #                     center = (int(x), int(y))
     #                     radius = int(radius)
                         
-    #                     cv2.circle(image, center, radius, (255, 0, 0), 2) 
+    #                     # Draw on original image
+    #                     cv2.circle(image, center, radius, (255, 0, 0), 2)
+    #                     cv2.putText(image, f"Blue: {area:.1f}px", (10, 30), 
+    #                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
                         
-    #                     # self.blue_found = True
-    #                     # print("blue found:", self.blue_found) 
-                        
-    #                     # self.stop()
-    #                     # self.cancel_goal()
-    #                     # self.go_to_blue(c)
-    #                     # self.get_logger().info('Blue box found. Stopping')
-    #                     # print("blue!")
-    
-    #                     self.go_to_blue(center, radius)
-                        
-   
-                         
+    #                     # Approach logic
+    #                     # self.go_to_blue(data)
+                
+    #             # Show processed image
+    #             # cv2.imshow('Processed', image)
+    #             cv2.namedWindow('Processed', cv2.WINDOW_NORMAL)
+    #             cv2.imshow('Processed', image)
+    #             cv2.resizeWindow('Processed', 320, 240)
+    #             cv2.waitKey(3)
+                
     #     except CvBridgeError as e:
-    #         self.get_logger().error(f'cv bridge error: {e}')
-    #         return
-    
+    #         self.get_logger().error(f'CV Bridge error: {e}')
+
     def callback(self, data):
         try:
-            # Convert and display original image
             image = self.bridge.imgmsg_to_cv2(data, 'bgr8')
             self.image_width = image.shape[1]
-            
-            # Show original image
-            cv2.namedWindow('Original', cv2.WINDOW_NORMAL)
-            cv2.imshow('Original', image)
-            cv2.resizeWindow('Original', 320, 240)
+            hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+            # Set HSV ranges with sensitivity parameter
+            blue_lower = np.array([120 - self.sensitivity, 100, 100])
+            blue_upper = np.array([120 + self.sensitivity, 255, 255])
+            red_lower = np.array([0 - self.sensitivity, 100, 100])
+            red_upper = np.array([0 + self.sensitivity, 255, 255])
+            green_lower = np.array([60 - self.sensitivity, 100, 100])
+            green_upper = np.array([60 + self.sensitivity, 255, 255])
+
+            # Create masks for each color
+            blue_mask = cv2.inRange(hsv_image, blue_lower, blue_upper)
+            red_mask = cv2.inRange(hsv_image, red_lower, red_upper)
+            green_mask = cv2.inRange(hsv_image, green_lower, green_upper)
+
+            # Combine masks (optional)
+            combined_mask = cv2.bitwise_or(blue_mask, cv2.bitwise_or(red_mask, green_mask))
+            final_image = cv2.bitwise_and(image, image, mask=combined_mask)
+
+            # Process blue
+            self.blue_found = False
+            blue_contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if blue_contours:
+                c = max(blue_contours, key=cv2.contourArea)
+                area = cv2.contourArea(c)
+                if area > 100:  # Using fixed threshold like in the example
+                    self.blue_found = True
+                    (x, y), radius = cv2.minEnclosingCircle(c)
+                    center = (int(x), int(y))
+                    cv2.circle(image, center, int(radius), (255, 0, 0), 2)
+                    cv2.putText(image, f"Blue: {area:.1f}px", (10, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+            # Process red (following the example logic)
+            self.red_found = False
+            red_contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if red_contours:
+                c = max(red_contours, key=cv2.contourArea)
+                area = cv2.contourArea(c)
+                if area > 100:
+                    self.red_found = True
+                    (x, y), radius = cv2.minEnclosingCircle(c)
+                    center = (int(x), int(y))
+                    cv2.circle(image, center, int(radius), (0, 0, 255), 2)
+                    cv2.putText(image, f"Red: {area:.1f}px", (10, 60), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+            # Process green (following the example logic)
+            self.green_found = False
+            green_contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if green_contours:
+                c = max(green_contours, key=cv2.contourArea)
+                area = cv2.contourArea(c)
+                if area > 100:
+                    self.green_found = True
+                    (x, y), radius = cv2.minEnclosingCircle(c)
+                    center = (int(x), int(y))
+                    cv2.circle(image, center, int(radius), (0, 255, 0), 2)
+                    cv2.putText(image, f"Green: {area:.1f}px", (10, 90), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+            # Display images like in the example
+            cv2.namedWindow('camera_Feed', cv2.WINDOW_NORMAL)
+            cv2.imshow('camera_Feed', image)
+            cv2.resizeWindow('camera_Feed', 320, 240)
+            cv2.waitKey(3)
+
+            cv2.namedWindow('threshold_Feed', cv2.WINDOW_NORMAL)
+            cv2.imshow('threshold_Feed', combined_mask)
+            cv2.resizeWindow('threshold_Feed', 320, 240)
+            cv2.waitKey(3)
+
+            cv2.namedWindow('threshold_Feed2', cv2.WINDOW_NORMAL)
+            cv2.imshow('threshold_Feed2', final_image)
+            cv2.resizeWindow('threshold_Feed2', 320, 240)
             cv2.waitKey(3)
             
-            # print("action, ", self.action)
-            
-            if self.action in ["nav", "scan", "approach"]:
-                # Convert to HSV
-                hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-                
-                # Better blue range (as per lab notes)
-                blue_lower1 = np.array([100, 100, 100])  # Wider range for blue
-                blue_upper1 = np.array([140, 255, 255])
-                
-                # Create mask
-                blue_mask = cv2.inRange(hsv_image, blue_lower1, blue_upper1)
-                
-                # Show threshold image for debugging
-                # cv2.imshow('Blue Mask', blue_mask)
-                cv2.namedWindow('Blue Mask', cv2.WINDOW_NORMAL)
-                cv2.imshow('Blue Mask', image)
-                cv2.resizeWindow('Blue Mask', 320, 240)
-                cv2.waitKey(3)
-                    
-                # Find contours
-                contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                if contours:
-                    # Get largest contour
-                    c = max(contours, key=cv2.contourArea)
-                    area = cv2.contourArea(c)
-                    
-                    # Dynamic area threshold (1% of image area)
-                    min_area = 0.01 * (image.shape[0] * image.shape[1])
-                    
-                    if area > min_area:
-                        if hasattr(self, 'scan_timer'):
-                            self.scan_timer.cancel()
-                        
-                        # Get circle properties
-                        (x, y), radius = cv2.minEnclosingCircle(c)
-                        center = (int(x), int(y))
-                        radius = int(radius)
-                        
-                        # Draw on original image
-                        cv2.circle(image, center, radius, (255, 0, 0), 2)
-                        cv2.putText(image, f"Blue: {area:.1f}px", (10, 30), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
-                        
-                        # Approach logic
-                        self.go_to_blue(center, radius)
-                
-                # Show processed image
-                # cv2.imshow('Processed', image)
-                cv2.namedWindow('Processed', cv2.WINDOW_NORMAL)
-                cv2.imshow('Processed', image)
-                cv2.resizeWindow('Processed', 320, 240)
-                cv2.waitKey(3)
-                
         except CvBridgeError as e:
             self.get_logger().error(f'CV Bridge error: {e}')
         

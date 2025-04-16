@@ -3,6 +3,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
+import math
 from math import sin, cos, pi
 import threading
 import cv2
@@ -28,9 +29,11 @@ class TargetPoint(Node):
         
         self.sensitivity = 10
         self.blue_found = False
+        print("blue found:", self.blue_found)
  
-        self.tpoint_radius = 200.0
+        self.tpoint_radius = 1.0
         self.tpoints = [
+            (-9.1, -14.2, 0.0),
             (-10.1, -15.2, 0.0),
             (-11.5, 4.43, 0.0),
             (-2.84, 5.12, 0.0),
@@ -93,19 +96,45 @@ class TargetPoint(Node):
         distance = ((current_pose.x - targetx)**2 + (current_pose.y - targety)**2)**0.5
         
         if distance < self.tpoint_radius and not self.blue_found:
-            self.get_logger()
+            self.stop()
+            self.get_logger().info("reached 1m radius of tpoint. Stopping and spinning")
             self.drive_circle()
+        elif self.blue_found:
+            self.stop()
+            
     
+    # def drive_circle(self):
+    #     twist = Twist()
+    #     # twist.linear.x = 0.2
+    #     twist.angular.z = 0.4
+        
+    #     start_time = self.get_clock().now()
+    #     while (self.get_clock().now() - start_time).nanoseconds < 62.6e9 and self.blue_found:
+    #         if self.blue_found == True:
+    #             self.stop()
+    #             return
+    #         self.publisher.publish(twist)
+    #         rcply.spin_once(self, timeout_sec=0.1)
+    #     self.stop()
+
     def drive_circle(self):
         twist = Twist()
-        # twist.linear.x = 0.2
-        twist.angular.z = 0.1  
-        
+        twist.angular.z = 0.2  # Spin in place at 0.2 rad/s
+
+        # Calculate the duration for a full 360-degree spin
+        spin_duration = 2 * math.pi / twist.angular.z  # H 31.4 seconds
+
         start_time = self.get_clock().now()
-        while (self.get_clock().now() - start_time).nanoseconds < 6.28e9 and self.blue_found:
+
+        while (self.get_clock().now() - start_time).nanoseconds < spin_duration * 1e9:
+            if self.blue_found:
+                self.stop()
+                return
             self.publisher.publish(twist)
-            rcply.spin_once(self, timeout_sec=0.1)
+            rclpy.spin_once(self, timeout_sec=0.1)
+
         self.stop()
+
         
     def stop(self):
         twist = Twist()
@@ -123,17 +152,18 @@ class TargetPoint(Node):
         center_x = int(x)
         image_center = self.image_width // 2  # Assume self.image_width is set in callback
         
-        # If box is too far (small in view), move forward
-        if radius < 30:  # Adjust threshold as needed
-            twist = Twist()
-            twist.linear.x = 0.1  # Forward speed
-            self.publisher.publish(twist)
-        
         # If box is off-center, rotate to center it
-        elif abs(center_x - image_center) > 20:  # 20-pixel tolerance
+        if abs(center_x - image_center) > 20:  # 20-pixel tolerance
             twist = Twist()
             twist.linear.x = 0.0
-            twist.angular.z = 0.1 if (center_x < image_center) else -0.3  # Turn direction
+            twist.angular.z = 2.0 if (center_x < image_center) else -2.0  # Turn direction
+            # self.stop()
+            self.publisher.publish(twist)
+        
+        # If box is too far (small in view), move forward
+        if radius < 50.0:  # Adjust threshold as needed
+            twist = Twist()
+            twist.linear.x = 0.1  # Forward speed
             self.publisher.publish(twist)
         
         # If box is large enough (close), stop
@@ -167,11 +197,12 @@ class TargetPoint(Node):
         # cv2.resizeWindow('Detection', 320, 240)
         # cv2.waitKey(3)
         
-        if contours:
+        if contours: 
             c = max(contours, key=cv2.contourArea)
             if cv2.contourArea(c) > 100:  # Threshold for ~1m distance
-                self.blue_found = True
                 self.stop()
+                self.get_logger().info('Blue box found. Stopping')
+                self.blue_found = True
                 self.go_to_blue(c)
                 (x, y), radius = cv2.minEnclosingCircle(c)
                 center = (int(x), int(y))
@@ -179,7 +210,6 @@ class TargetPoint(Node):
                 cv2.circle(image, center, radius, (255, 0, 0), 2)
                 
                 self.stop()
-                self.get_logger().info('Blue box found. Stopping')
 
         cv2.imshow('Detection', image)
         cv2.waitKey(3)

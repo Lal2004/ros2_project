@@ -25,20 +25,19 @@ class TargetPoint(Node):
         self.bridge = CvBridge()
         self.subscription = self.create_subscription(Image, '/camera/image_raw', self.callback, 10)
 
-        # self.image_width = 640  # Will be updated from first image
         self.sensitivity = 10
         self.blue_found = False
         self.red_found = False
         self.green_found = False
-        # self.buffer = 1.0
 
-        # print("blue found:", self.blue_found)
         self.rate = self.create_rate(10)  # 10 Hz
         self.tpoint_radius = 1.0
 
-        # robot will go to random points, but coordinates below are corners of the map with 1m radius between the walls
+        # coordinates below are corners of the map with 1m radius between the walls
+        # these were hardcoded so that robot can explore the whole map 
         self.tpoints = [
             (-9.5, -14.5, 0.0),
+            (2.3, -10.0, 0.0),
             (-11.0, 3.7, 0.0),
             (-3.2, 3.4, 0.0),
             (-1.5, -3.1, 0.0),
@@ -54,9 +53,9 @@ class TargetPoint(Node):
 
         
         self.action = "nav" # "scan" "approach" "stationary" 
-        self.rotation_in_progress = False
-        self.rotation_end_time = self.get_clock().now()  # Initialize with current time
-        self.rotation_direction = 0
+        self.spin_time = None
+        self.spin_start_time = None  # To track when spinning began
+        # self.rotation_direction = 0
         self.current_tpoint = 0
         self.send_goal()
         
@@ -98,56 +97,44 @@ class TargetPoint(Node):
         result = future.result().result
         self.get_logger().info(f'Navigation result: {result}')
         if self.action == "nav":
-            self.current_tpoint = (self.current_tpoint + 1) % len(self.tpoints)
-            self.send_goal()    
-    
+            # self.current_tpoint = (self.current_tpoint + 1) % len(self.tpoints)
+            # self.send_goal()    
+            self.spin_for_duration(30)
+
     
     def feedback_callback(self, feedback_msg):
-        # print("fc")
-        if self.action == "nav":
-            return
-        current_pose = feedback_msg.feedback.current_pose.pose.position
-        targetx, targety, _ = self.tpoints[self.current_tpoint]
-        distance = ((current_pose.x - targetx)**2 + (current_pose.y - targety)**2)**0.5
-        
-        if distance < self.tpoint_radius:
-            self.get_logger().info("reached 1m radius of tpoint. Stopping and spinning")
-            self.action = "scan"
-            self.drive_circle()
+        feedback = feedback_msg.feedback
+        # print(feedback)
 
-    def drive_circle(self):
-        print("circle")
-        twist = Twist()
-        twist.linear.x = 0.0  
-        twist.angular.z = 0.2  # Spin in place at 0.2 rad/s
-        self.publisher.publish(twist)
-        
-        # Set timeout for scanning (5 seconds)
-        self.scan_timer = self.create_timer(15.0, self.scan_timeout)
-
-        # # Calculate the duration for a full 360-degree spin
-        # spin_duration = 2 * math.pi / twist.angular.z  # H 31.4 seconds
-
-        # start_time = self.get_clock().now()
-
-        # while rclpy.ok():
-        #     while (self.get_clock().now() - start_time).nanoseconds < spin_duration * 1e9:
-        #         # if self.blue_found:
-        #         #     self.stop()
-        #         #     self.publisher.publish(twist)
-        #         #     rclpy.spin_once(self, timeout_sec=0.1)
-        #         #     break
-        #         self.publisher.publish(twist)
-        #         rclpy.spin_once(self, timeout_sec=0.1)
-
-    def scan_timeout(self):
-        print("st")
-        if self.action == "scan":
-            self.get_logger().info("No blue box found, moving to next waypoint")
-            self.action = "nav"
-            self.current_tpoint = (self.current_tpoint + 1) % len(self.tpoints)
-            self.send_goal()    
-        self.scan_timer.cancel()
+    def spin_for_duration(self, duration_sec=30):
+        """Spin the robot for specified duration then go to next point"""
+        if not hasattr(self, 'spin_timer') or self.spin_timer is None:
+            self.cancel_goal()
+            # First call - start spinning
+            self.get_logger().info(f'Starting to spin for {duration_sec} seconds')
+            self.spin_start_time = self.get_clock().now()
+            print(self.spin_start_time)
+            # Start spinning motion
+            twist = Twist()
+            twist.linear.x = 0.0  
+            twist.angular.z = 0.5 
+            self.publisher.publish(twist)
+            # self.get_logger().info(f"Published Twist command: linear.x={twist.linear.x}, angular.z={twist.angular.z}")
+            
+            # Create timer to check duration
+            self.spin_timer = self.create_timer(0.1, lambda: self.spin_for_duration(duration_sec))
+        else:
+            # Subsequent calls - check duration
+            time_taken = (self.get_clock().now() - self.spin_start_time).nanoseconds / 1e9
+            if time_taken >= duration_sec:
+                # Time's up - stop spinning and proceed
+                self.stop()
+                self.spin_timer.cancel()
+                self.spin_timer = None
+                self.get_logger().info('Finished spinning')
+                # Move to next point
+                self.current_tpoint = (self.current_tpoint + 1) % len(self.tpoints)
+                self.send_goal()
 
     def stop(self):
         print("stop")
@@ -192,8 +179,8 @@ class TargetPoint(Node):
                     (x, y), radius = cv2.minEnclosingCircle(c)
                     center = (int(x), int(y))
                     cv2.circle(image, center, int(radius), (255, 0, 0), 2)
-                    cv2.putText(image, f"Blue: {area:.1f}px", (10, 30), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                    cv2.putText(image, f"Blue: {area:.1f}", (50, 80), 
+                              cv2.FONT_HERSHEY_DUPLEX, 1.2, (255,255,255), 2)
 
             # Process red (following the example logic)
             # self.red_found = False
@@ -206,8 +193,8 @@ class TargetPoint(Node):
                     (x, y), radius = cv2.minEnclosingCircle(c)
                     center = (int(x), int(y))
                     cv2.circle(image, center, int(radius), (0, 0, 255), 2)
-                    cv2.putText(image, f"Red: {area:.1f}px", (10, 60), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                    cv2.putText(image, f"Red: {area:.1f}", (50, 120), 
+                              cv2.FONT_HERSHEY_DUPLEX, 1.2, (255,255,255), 2)
 
             # Process green (following the example logic)
             # self.green_found = False
@@ -220,23 +207,23 @@ class TargetPoint(Node):
                     (x, y), radius = cv2.minEnclosingCircle(c)
                     center = (int(x), int(y))
                     cv2.circle(image, center, int(radius), (0, 255, 0), 2)
-                    cv2.putText(image, f"Green: {area:.1f}px", (10, 90), 
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                    cv2.putText(image, f"Green: {area:.1f}", (50, 160), 
+                              cv2.FONT_HERSHEY_DUPLEX, 1.2, (255,255,255), 2)
 
             # Display images like in the example
             cv2.namedWindow('camera_Feed', cv2.WINDOW_NORMAL)
             cv2.imshow('camera_Feed', image)
-            cv2.resizeWindow('camera_Feed', 320, 240)
+            cv2.resizeWindow('camera_Feed', 540, 540)
             cv2.waitKey(3)
 
-            cv2.namedWindow('threshold_Feed', cv2.WINDOW_NORMAL)
-            cv2.imshow('threshold_Feed', combined_mask)
-            cv2.resizeWindow('threshold_Feed', 320, 240)
-            cv2.waitKey(3)
+            # cv2.namedWindow('threshold_Feed', cv2.WINDOW_NORMAL)
+            # cv2.imshow('threshold_Feed', combined_mask)
+            # cv2.resizeWindow('threshold_Feed', 540, 540)
+            # cv2.waitKey(3)
 
             cv2.namedWindow('threshold_Feed2', cv2.WINDOW_NORMAL)
             cv2.imshow('threshold_Feed2', final_image)
-            cv2.resizeWindow('threshold_Feed2', 320, 240)
+            cv2.resizeWindow('threshold_Feed2', 540, 540)
             cv2.waitKey(3)
             
         except CvBridgeError as e:
